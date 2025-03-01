@@ -1,94 +1,127 @@
+#!/usr/bin/env python3
 import time
-from gpiozero import Robot, DigitalInputDevice
-import smbus2 as smbus  # For gyroscope readings
+import smbus2 as smbus
+import RPi.GPIO as GPIO
 
-# --- Constants ---
-SAMPLETIME = 0.1          
-KP = 0.05                 
-KI = 0.01                 
-KD = 0.02                 
-TARGET_ANGLE = 0         
-ROTATION_TICKS = 40       
-target_ticks = 2 * ROTATION_TICKS  
+# Import SunFounder libraries
+from picarx import Picarx           # For driving the car (motors + steering servo)
+from picamera2 import Picamera2     # For camera functionality (from vilib)
 
+# -----------------------------
+# Configuration and Constants
+# -----------------------------
+SAMPLETIME = 0.1       # seconds between PID updates
+KP = 0.05              # Proportional gain (tune these for your setup)
+KI = 0.01              # Integral gain
+KD = 0.02              # Derivative gain
 
-integral = 0
-previous_error = 0
+TARGET_ANGLE = 0       # desired heading (in degrees, from the gyro)
+ROTATION_TICKS = 40    # approximate encoder ticks per full motor rotation
+target_ticks = 2 * ROTATION_TICKS  # we want the robot to move 2 rotations
 
+# -----------------------------
+# Setup for GPIO (Encoder)
+# -----------------------------
+GPIO.setmode(GPIO.BCM)
 
 class Encoder:
     def __init__(self, pin):
-        self._value = 0
-        encoder = DigitalInputDevice(pin)
-        encoder.when_activated = self._increment
-        encoder.when_deactivated = self._increment
+        self.pin = pin
+        self._ticks = 0
+        GPIO.setup(self.pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.add_event_detect(self.pin, GPIO.BOTH, callback=self._callback)
+    
+    def _callback(self, channel):
+        self._ticks += 1
     
     def reset(self):
-        self._value = 0
-    
-    def _increment(self):
-        self._value += 1
+        self._ticks = 0
     
     @property
-    def value(self):
-        return self._value
+    def ticks(self):
+        return self._ticks
 
-
+# -----------------------------
+# Gyroscope (MPU6050) Interface
+# -----------------------------
 class Gyroscope:
     def __init__(self, address=0x68):
         self.bus = smbus.SMBus(1)
         self.address = address
-        self.bus.write_byte_data(self.address, 0x6B, 0)  
+        # Wake up MPU6050
+        self.bus.write_byte_data(self.address, 0x6B, 0)
     
     def get_angle(self):
+        # Read high and low bytes from the gyroscope registers
         high = self.bus.read_byte_data(self.address, 0x43)
         low = self.bus.read_byte_data(self.address, 0x44)
         angle = (high << 8) + low
         if angle > 32768:
             angle -= 65536
-        return angle / 131.0 
+        return angle / 131.0  # convert raw reading to degrees
 
+# -----------------------------
+# Initialize SunFounder Components
+# -----------------------------
+# Picarx object provides motor and steering control.
+px = Picarx()
 
-r = Robot((4,),(5,))
-e1 = Encoder(17)
-e2 = Encoder(18)
+# Initialize the camera (vilib's picamera2)
+picam2 = Picamera2()
+# (Additional camera configuration can be done here if desired)
+
+# Initialize encoders.
+# (Assume left encoder is on GPIO17 and right encoder on GPIO18.)
+encoder_left = Encoder(17)
+encoder_right = Encoder(18)
+
+# Initialize the gyroscope.
 gyro = Gyroscope()
 
+# -----------------------------
+# PID Variables
+# -----------------------------
+integral = 0
+previous_error = 0
 
-base_speed = 0.5
-m1_speed = base_speed
-m2_speed = base_speed
-r.value = (m1_speed, m2_speed)
+# -----------------------------
+# Start Driving
+# -----------------------------
+# Set a base forward speed.
+# (For PiCar‑X, forward(speed) typically sets a PWM value; adjust as needed.)
+base_speed = 50  
+px.forward(base_speed)  # start moving forward
 
-print("Starting PID distance drive...")
+print("Starting PID-controlled distance drive...")
 
-
-while e1.value < target_ticks and e2.value < target_ticks:
-
+while encoder_left.ticks < target_ticks and encoder_right.ticks < target_ticks:
+    # Get current heading error from the gyro
     angle_error = TARGET_ANGLE - gyro.get_angle()
     
-
+    # Compute PID terms
     integral += angle_error * SAMPLETIME
     derivative = (angle_error - previous_error) / SAMPLETIME
     correction = (KP * angle_error) + (KI * integral) + (KD * derivative)
     previous_error = angle_error
     
-
-    m1_speed = base_speed - correction
-    m2_speed = base_speed + correction
+    # For PiCar‑X, steering is controlled by a servo.
+    # Assume a neutral (straight) steering angle is 90°.
+    # Adjust the steering angle by the PID correction.
+    steering_angle = 90 + correction
+    # Clamp the steering angle to safe limits (e.g., 60° to 120°)
+    steering_angle = max(min(steering_angle, 120), 60)
+    px.set_dir_servo_angle(steering_angle)
     
-
-    m1_speed = max(min(1, m1_speed), 0)
-    m2_speed = max(min(1, m2_speed), 0)
-    
-
-    r.value = (m1_speed, m2_speed)
-    
-    print(f"Encoder1: {e1.value}, Encoder2: {e2.value}")
+    # Debug output
+    print(f"Left ticks: {encoder_left.ticks}, Right ticks: {encoder_right.ticks}")
     print(f"Angle error: {angle_error:.2f}, Correction: {correction:.2f}")
-    print(f"Motor speeds -> m1: {m1_speed:.2f}, m2: {m2_speed:.2f}")
+    print(f"Steering angle set to: {steering_angle:.2f}")
     
     time.sleep(SAMPLETIME)
 
-r.value = (0, 0)
+# Once the target distance is reached, stop the robot.
+px.forward(0)
 print("Motion complete!")
+
+# Clean up GPIO resources
+GPIO.cleanup()
