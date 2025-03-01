@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import RPi.GPIO as GPIO
 import time
+import sys
 
 # GPIO pin setup for the HC-SR04 ultrasonic sensor
 TRIG_PIN = 23  # Trigger pin
@@ -45,9 +46,11 @@ if __name__ == "__main__":
     try:
         while True:
             dist = get_distance()
-            print("Distance: {:.2f} cm".format(dist))
+            # Print continuously to the same line
+            sys.stdout.write("\rDistance: {:.2f} cm".format(dist))
+            sys.stdout.flush()
             time.sleep(1)
     except KeyboardInterrupt:
-        print("Measurement stopped by user")
+        print("\nMeasurement stopped by user")
     finally:
         GPIO.cleanup()
