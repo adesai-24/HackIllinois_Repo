@@ -1,35 +1,34 @@
 #!/usr/bin/env python3
 import time
-import smbus2 as smbus
 import RPi.GPIO as GPIO
 
 # Import SunFounder libraries
-from picarx import Picarx           # For driving the car (motors + steering servo)
+from picarx import Picarx           # For driving the car (motors & steering)
 from picamera2 import Picamera2     # For camera functionality (from vilib)
 
 # -----------------------------
-# Configuration and Constants
+# Configuration & Constants
 # -----------------------------
-SAMPLETIME = 0.1       # seconds between PID updates
-KP = 0.05              # Proportional gain (tune these for your setup)
-KI = 0.01              # Integral gain
-KD = 0.02              # Derivative gain
+SAMPLETIME = 0.1        # PID loop interval (seconds)
+KP = 0.1                # Proportional gain (tune as needed)
+KI = 0.01               # Integral gain
+KD = 0.05               # Derivative gain
 
-TARGET_ANGLE = 0       # desired heading (in degrees, from the gyro)
-ROTATION_TICKS = 40    # approximate encoder ticks per full motor rotation
-target_ticks = 2 * ROTATION_TICKS  # we want the robot to move 2 rotations
+ROTATION_TICKS = 40     # Approximate encoder ticks per full motor rotation
+target_ticks = 2 * ROTATION_TICKS  # Target ticks for 2 rotations
 
 # -----------------------------
-# Setup for GPIO (Encoder)
+# Setup GPIO & Encoder Class
 # -----------------------------
 GPIO.setmode(GPIO.BCM)
 
 class Encoder:
     def __init__(self, pin):
-        self.pin = pin
         self._ticks = 0
-        GPIO.setup(self.pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.add_event_detect(self.pin, GPIO.BOTH, callback=self._callback)
+        self.pin = pin
+        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        # Detect both rising and falling edges
+        GPIO.add_event_detect(pin, GPIO.BOTH, callback=self._callback)
     
     def _callback(self, channel):
         self._ticks += 1
@@ -42,86 +41,66 @@ class Encoder:
         return self._ticks
 
 # -----------------------------
-# Gyroscope (MPU6050) Interface
-# -----------------------------
-class Gyroscope:
-    def __init__(self, address=0x68):
-        self.bus = smbus.SMBus(1)
-        self.address = address
-        # Wake up MPU6050
-        self.bus.write_byte_data(self.address, 0x6B, 0)
-    
-    def get_angle(self):
-        # Read high and low bytes from the gyroscope registers
-        high = self.bus.read_byte_data(self.address, 0x43)
-        low = self.bus.read_byte_data(self.address, 0x44)
-        angle = (high << 8) + low
-        if angle > 32768:
-            angle -= 65536
-        return angle / 131.0  # convert raw reading to degrees
-
-# -----------------------------
 # Initialize SunFounder Components
 # -----------------------------
 # Picarx object provides motor and steering control.
 px = Picarx()
-
-# Initialize the camera (vilib's picamera2)
+# Initialize the camera (even if not used in this example)
 picam2 = Picamera2()
-# (Additional camera configuration can be done here if desired)
+# (Additional camera configuration can be added here if desired)
 
-# Initialize encoders.
-# (Assume left encoder is on GPIO17 and right encoder on GPIO18.)
+# Initialize encoders (assumed connected to GPIO17 and GPIO18)
 encoder_left = Encoder(17)
 encoder_right = Encoder(18)
 
-# Initialize the gyroscope.
-gyro = Gyroscope()
-
 # -----------------------------
-# PID Variables
+# PID Variables for Distance Control
 # -----------------------------
 integral = 0
 previous_error = 0
 
-# -----------------------------
-# Start Driving
-# -----------------------------
-# Set a base forward speed.
-# (For PiCar‑X, forward(speed) typically sets a PWM value; adjust as needed.)
-base_speed = 50  
-px.forward(base_speed)  # start moving forward
+# Use a base speed (PWM value) for forward motion; adjust as needed.
+base_speed = 50
+current_speed = base_speed
 
-print("Starting PID-controlled distance drive...")
+# Start driving forward
+px.forward(current_speed)
+print("Starting distance-controlled drive...")
 
-while encoder_left.ticks < target_ticks and encoder_right.ticks < target_ticks:
-    # Get current heading error from the gyro
-    angle_error = TARGET_ANGLE - gyro.get_angle()
+# -----------------------------
+# PID Loop (Distance Only)
+# -----------------------------
+while (encoder_left.ticks < target_ticks) and (encoder_right.ticks < target_ticks):
+    # Compute average tick count between both wheels
+    current_ticks = (encoder_left.ticks + encoder_right.ticks) / 2.0
+    # Error is the remaining ticks to reach the target
+    error = target_ticks - current_ticks
     
-    # Compute PID terms
-    integral += angle_error * SAMPLETIME
-    derivative = (angle_error - previous_error) / SAMPLETIME
-    correction = (KP * angle_error) + (KI * integral) + (KD * derivative)
-    previous_error = angle_error
+    # PID calculations
+    integral += error * SAMPLETIME
+    derivative = (error - previous_error) / SAMPLETIME
+    output = (KP * error) + (KI * integral) + (KD * derivative)
+    previous_error = error
     
-    # For PiCar‑X, steering is controlled by a servo.
-    # Assume a neutral (straight) steering angle is 90°.
-    # Adjust the steering angle by the PID correction.
-    steering_angle = 90 + correction
-    # Clamp the steering angle to safe limits (e.g., 60° to 120°)
-    steering_angle = max(min(steering_angle, 120), 60)
-    px.set_dir_servo_angle(steering_angle)
+    # Adjust speed based on the PID output. As we approach the target, output will decrease.
+    # Here, we add the PID output to the base speed. (Depending on tuning, you might subtract instead.)
+    new_speed = base_speed + output
     
-    # Debug output
-    print(f"Left ticks: {encoder_left.ticks}, Right ticks: {encoder_right.ticks}")
-    print(f"Angle error: {angle_error:.2f}, Correction: {correction:.2f}")
-    print(f"Steering angle set to: {steering_angle:.2f}")
+    # Clamp the new speed between a minimum and maximum value.
+    new_speed = max(20, min(100, int(new_speed)))
+    current_speed = new_speed
+    
+    # Set the new speed for both motors
+    px.forward(current_speed)
+    
+    # Debug output to show progress
+    print(f"Left ticks: {encoder_left.ticks}, Right ticks: {encoder_right.ticks}, Speed: {current_speed}")
     
     time.sleep(SAMPLETIME)
 
-# Once the target distance is reached, stop the robot.
+# Stop the robot when the target distance is reached.
 px.forward(0)
-print("Motion complete!")
+print("Target distance reached. Motion complete!")
 
 # Clean up GPIO resources
 GPIO.cleanup()
