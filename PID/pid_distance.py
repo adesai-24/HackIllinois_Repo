@@ -14,7 +14,7 @@ KP = 0.1                # Proportional gain (tune as needed)
 KI = 0.01               # Integral gain
 KD = 0.05               # Derivative gain
 
-ROTATION_TICKS = 40     # Approximate encoder ticks per full motor rotation
+ROTATION_TICKS = 5     # Approximate encoder ticks per full motor rotation
 target_ticks = 2 * ROTATION_TICKS  # Target ticks for 2 rotations
 
 # -----------------------------
