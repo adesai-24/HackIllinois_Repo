@@ -1,16 +1,14 @@
-#!/usr/bin/env python3
 from gpiozero import DistanceSensor
+from gpiozero.pins.pigpio import PiGPIOFactory
 import time
 
-# Initialize the DistanceSensor:
-# Adjust the max_distance (in meters) if needed.
-ultrasonic = DistanceSensor(echo=17, trigger=4, max_distance=2)
+# Use the pigpio pin factory for more accurate timing (make sure pigpiod is running)
+factory = PiGPIOFactory()
 
-try:
-    while True:
-        # Distance in meters (converted to centimeters)
-        distance_cm = ultrasonic.distance * 100
-        print("Distance: {:.2f} cm".format(distance_cm))
-        time.sleep(1)
-except KeyboardInterrupt:
-    print("\nMeasurement stopped by user")
+# Initialize the ultrasonic sensor: trigger on GPIO17, echo on GPIO18.
+sensor = DistanceSensor(echo=18, trigger=17, max_distance=2, pin_factory=factory)
+
+while True:
+    # sensor.distance returns the distance in meters; convert to cm for display
+    print("Distance: {:.2f} cm".format(sensor.distance * 100))
+    time.sleep(1)
