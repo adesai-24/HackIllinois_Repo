@@ -3,7 +3,7 @@ import RPi.GPIO as GPIO
 import time
 import sys
 
-# GPIO pin setup for the HC-SR04 ultrasonic sensor
+# HC-SR04 sensor GPIO pin configuration
 TRIG_PIN = 23  # Trigger pin
 ECHO_PIN = 24  # Echo pin
 
@@ -14,15 +14,15 @@ GPIO.setup(ECHO_PIN, GPIO.IN)
 
 def get_distance():
     """
-    Triggers the ultrasonic sensor and measures the time until echo is received.
+    Triggers the HC-SR04 ultrasonic sensor and measures the time until echo is received.
     Returns:
         distance (float): Distance in centimeters.
     """
-    # Ensure trigger is low
+    # Ensure trigger is low initially
     GPIO.output(TRIG_PIN, False)
     time.sleep(0.0002)  # 200 microseconds delay
 
-    # Send a 10 microsecond pulse to trigger
+    # Send a 10 microsecond pulse to trigger the sensor
     GPIO.output(TRIG_PIN, True)
     time.sleep(0.00001)  # 10 microseconds pulse
     GPIO.output(TRIG_PIN, False)
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     try:
         while True:
             dist = get_distance()
-            # Print continuously to the same line
+            # Update the same console line using carriage return
             sys.stdout.write("\rDistance: {:.2f} cm".format(dist))
             sys.stdout.flush()
             time.sleep(1)
