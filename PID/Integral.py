@@ -30,7 +30,7 @@ KP = 0.02
 KD = 0.01
 KI = 0.005
 
-r = Robot((10,9), (8,7)) 
+r = Robot((4,5)) 
 e1 = Encoder(17)
 e2 = Encoder(18)
 
