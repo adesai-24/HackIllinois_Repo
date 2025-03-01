@@ -10,97 +10,76 @@ from picamera2 import Picamera2     # For camera functionality (from vilib)
 # Configuration & Constants
 # -----------------------------
 SAMPLETIME = 0.1        # PID loop interval (seconds)
-KP = 0.1                # Proportional gain (tune as needed)
-KI = 0.01               # Integral gain
-KD = 0.05               # Derivative gain
 
-ROTATION_TICKS = 5     # Approximate encoder ticks per full motor rotation
-target_ticks = 2 * ROTATION_TICKS  # Target ticks for 2 rotations
+# PID Gains (tune these values for your robot)
+KP = 1.0
+KI = 0.05
+KD = 0.2
 
-# -----------------------------
-# Setup GPIO & Encoder Class
-# -----------------------------
-GPIO.setmode(GPIO.BCM)
+# Target distance (in centimeters). 2 inches ≈ 5.08 cm, so we use 5 cm as the target.
+target_distance = 5.0
 
-class Encoder:
-    def __init__(self, pin):
-        self._ticks = 0
-        self.pin = pin
-        GPIO.setup(pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        # Detect both rising and falling edges
-        GPIO.add_event_detect(pin, GPIO.BOTH, callback=self._callback)
-    
-    def _callback(self, channel):
-        self._ticks += 1
-    
-    def reset(self):
-        self._ticks = 0
-    
-    @property
-    def ticks(self):
-        return self._ticks
+# Maximum and minimum speed (PWM value)
+max_speed = 100
+min_speed = 0
 
 # -----------------------------
 # Initialize SunFounder Components
 # -----------------------------
-# Picarx object provides motor and steering control.
+# Create the Picarx object for motor & steering control.
 px = Picarx()
-# Initialize the camera (even if not used in this example)
+# Initialize the camera (even if not used directly in this example)
 picam2 = Picamera2()
-# (Additional camera configuration can be added here if desired)
 
-# Initialize encoders (assumed connected to GPIO17 and GPIO18)
-encoder_left = Encoder(17)
-encoder_right = Encoder(18)
+print("Starting distance-controlled drive using the ultrasonic sensor...")
 
 # -----------------------------
 # PID Variables for Distance Control
 # -----------------------------
-integral = 0
-previous_error = 0
+integral = 0.0
+previous_error = 0.0
 
-# Use a base speed (PWM value) for forward motion; adjust as needed.
-base_speed = 50
-current_speed = base_speed
-
-# Start driving forward
-px.forward(current_speed)
-print("Starting distance-controlled drive...")
-
-# -----------------------------
-# PID Loop (Distance Only)
-# -----------------------------
-while (encoder_left.ticks < target_ticks) and (encoder_right.ticks < target_ticks):
-    # Compute average tick count between both wheels
-    current_ticks = (encoder_left.ticks + encoder_right.ticks) / 2.0
-    # Error is the remaining ticks to reach the target
-    error = target_ticks - current_ticks
+while True:
+    # Read current distance from the ultrasonic sensor.
+    # (Assumes px.get_distance() returns the distance in centimeters.)
+    distance = px.get_distance()
+    print(f"Measured distance: {distance:.2f} cm")
     
-    # PID calculations
+    # If the robot is at or below the target distance, break out of the loop.
+    if distance <= target_distance:
+        break
+    
+    # Compute the error: the difference between the measured distance and the target.
+    error = distance - target_distance
+    
+    # PID calculations.
     integral += error * SAMPLETIME
     derivative = (error - previous_error) / SAMPLETIME
     output = (KP * error) + (KI * integral) + (KD * derivative)
     previous_error = error
     
-    # Adjust speed based on the PID output. As we approach the target, output will decrease.
-    # Here, we add the PID output to the base speed. (Depending on tuning, you might subtract instead.)
-    new_speed = base_speed + output
+    # Use the PID output to set the speed.
+    # When far from the wall, error is high so output (and speed) is high.
+    # As the robot approaches, error decreases so the speed is reduced.
+    new_speed = int(output)
     
-    # Clamp the new speed between a minimum and maximum value.
-    new_speed = max(20, min(100, int(new_speed)))
-    current_speed = new_speed
+    # Clamp the new speed between min_speed and max_speed.
+    if new_speed > max_speed:
+        new_speed = max_speed
+    if new_speed < min_speed:
+        new_speed = min_speed
     
-    # Set the new speed for both motors
-    px.forward(current_speed)
+    # Set the new forward speed.
+    px.forward(new_speed)
     
-    # Debug output to show progress
-    print(f"Left ticks: {encoder_left.ticks}, Right ticks: {encoder_right.ticks}, Speed: {current_speed}")
+    # Debug output.
+    print(f"Error: {error:.2f}, PID output (speed command): {new_speed}")
     
     time.sleep(SAMPLETIME)
 
-# Stop the robot when the target distance is reached.
+# Stop the robot once the target distance is reached.
 px.forward(0)
 print("Target distance reached. Motion complete!")
 
-# Clean up GPIO resources
+# Clean up GPIO resources.
 GPIO.cleanup()
