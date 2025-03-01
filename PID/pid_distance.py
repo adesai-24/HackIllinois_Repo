@@ -50,7 +50,7 @@ class Gyroscope:
 
 # --- Initialize Robot, Encoders, and Gyroscope ---
 # Adjust the motor control pins as per your PiCar wiring.
-r = Robot((10, 9), (8, 7))
+r = Robot((4, 5))
 e1 = Encoder(17)
 e2 = Encoder(18)
 gyro = Gyroscope()
