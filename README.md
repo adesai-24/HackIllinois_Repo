@@ -16,7 +16,7 @@ _Combining AI with Animal Sciences to deliver the most comforting and efficient 
 
 ## Project Description
 
-This project is a robotic platform that leverages computer vision (CV) and PID control to interact with animals in a novel way. The robot uses a camera and CV algorithms to detect specific animals (like sheep) by identifying their unique features. Once a target animal is identified, the robot calculates its position relative to the camera frame, adjusts its orientation using a PID-based turning control, and ultimately plays a specially chosen frequency. The goal is for the sound frequency to evoke a reaction in the target animal species, offering potential applications in animal behavior studies or livestock management.
+This project is a robotic platform that leverages computer vision (CV) to interact with animals in a novel way. The robot uses a camera and CV algorithms to detect specific animals (like sheep) by identifying their unique features. Once a target animal is identified, the robot calculates its position relative to the camera frame, adjusts its orientation using a variety of sensors, and ultimately plays a specially chosen frequency. The goal is for the sound frequency to evoke a reaction in the target animal species, offering potential applications in animal behavior studies or livestock management.
 
 ---
 
