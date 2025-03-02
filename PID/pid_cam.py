@@ -20,6 +20,8 @@ FRAME_HEIGHT = 480           # Camera frame height (pixels)
 # Initialize Componentss
 px = Picarx()
 model = YOLO("yolov5su.pt")  # Using the improved 'u' model
+music = Music()
+music.music_set_volume(40)
 
 picam2 = Picamera2()
 config = picam2.create_preview_configuration(
