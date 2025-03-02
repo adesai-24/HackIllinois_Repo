@@ -9,46 +9,43 @@ from picarx import Picarx
 # -----------------------------
 # Configuration & Constants
 # -----------------------------
-SAMPLETIME = 0.1        # Loop interval (seconds)
-KP_TURN = 0.1           # Proportional gain for turning
+SAMPLETIME = 0.1             # Loop interval (seconds)
+KP_TURN = 0.2                # Proportional gain for turning (adjust as needed)
+ERROR_DEADBAND = 20          # Pixels error below which we consider the cup centered
+MAX_TURN_SPEED = 50          # Maximum motor speed magnitude for turning
 
-FRAME_WIDTH = 640       # Camera frame width (pixels)
-FRAME_HEIGHT = 480      # Camera frame height (pixels)
-
-# Steering limits (in degrees; adjust as needed)
-MAX_STEER = 30
-MIN_STEER = -30
+FRAME_WIDTH = 640            # Camera frame width (pixels)
+FRAME_HEIGHT = 480           # Camera frame height (pixels)
 
 # -----------------------------
 # Initialize Components
 # -----------------------------
-# Initialize robot drive & steering
+# Initialize robot drive & differential motor control
 px = Picarx()
 
-# Load YOLO model (using a YOLOv5 model file)
+# Load YOLO model (using a YOLOv5 model file; change filename if needed)
 model = YOLO("yolov5s.pt")
-# (If using a YOLOv8 model, adjust the file accordingly.)
 
 # Initialize the robot camera using Picamera2
 picam2 = Picamera2()
-# Create and configure a preview at the desired resolution and format.
+# Configure preview: use 4-channel XRGB format; we'll drop the alpha channel later.
 config = picam2.create_preview_configuration(
     main={"format": "XRGB8888", "size": (FRAME_WIDTH, FRAME_HEIGHT)}
 )
 picam2.configure(config)
-picam2.start_preview()  # Optional: start preview if you have a display connected
+picam2.start_preview()  # Optional: if a local display is attached
 picam2.start()
 
-print("Starting combined cup detection and steering control. Press 'q' to exit.")
+print("Starting cup detection and in-place turning control. Press 'q' to exit.")
 
 try:
     while True:
-        # Capture a frame from the camera (4 channels: XRGB)
+        # Capture a frame (4 channels: XRGB)
         frame = picam2.capture_array()
-        # Drop the extra alpha channel (convert from 4 channels to 3 channels)
+        # Convert frame to 3 channels (drop alpha)
         frame = frame[:, :, :3]
-        
-        # Run YOLO inference (using stream mode for efficiency)
+
+        # Run YOLO inference on the frame (stream mode for efficiency)
         results = model(frame, stream=True)
         
         cup_detected = False
@@ -61,7 +58,6 @@ try:
                 cls_index = int(box.cls[0]) if box.cls is not None else -1
                 if cls_index == 41:
                     conf = box.conf[0]
-                    # Choose the detection with the highest confidence
                     if conf > best_confidence:
                         best_confidence = conf
                         best_bbox = box.xyxy[0]
@@ -72,46 +68,57 @@ try:
             x_min, y_min, x_max, y_max = map(int, best_bbox)
             # Compute the center of the bounding box
             bbox_center_x = (x_min + x_max) / 2
-            # Compute the error: difference between frame center and object center
+            # Compute horizontal error (positive if cup is left of center)
             frame_center_x = FRAME_WIDTH / 2
-            error = frame_center_x - bbox_center_x  # positive error means object is left of center
+            error = frame_center_x - bbox_center_x
             
-            # Compute turn command (proportional to error)
-            turn_command = KP_TURN * error
-            # Clamp the turn command to steering limits
-            if turn_command > MAX_STEER:
-                turn_command = MAX_STEER
-            elif turn_command < MIN_STEER:
-                turn_command = MIN_STEER
-            
-            # Apply the steering command
-            px.set_dir(turn_command)
-            
-            # Print detection and steering info to the console
+            # Print detection info
             print(f"Cup detected: BBox=({x_min}, {y_min}, {x_max}, {y_max}), Confidence={best_confidence:.2f}")
             print(f"Frame center: {frame_center_x:.2f}, Object center: {bbox_center_x:.2f}, Error: {error:.2f}")
-            print(f"Turn command applied: {turn_command:.2f}\n")
             
-            # Optionally, draw the bounding box on the frame (for visualization)
+            # If error is within deadband, consider the cup centered: stop turning.
+            if abs(error) < ERROR_DEADBAND:
+                turn_speed = 0
+                print("Cup centered. Stopping rotation.\n")
+            else:
+                # Compute turn speed from error (adjust gain as needed)
+                turn_speed = KP_TURN * error
+                # Clamp the turn speed to maximum limits
+                if turn_speed > MAX_TURN_SPEED:
+                    turn_speed = MAX_TURN_SPEED
+                elif turn_speed < -MAX_TURN_SPEED:
+                    turn_speed = -MAX_TURN_SPEED
+                print(f"Turning with computed speed: {turn_speed:.2f}\n")
+            
+            # To turn in place:
+            # - If turn_speed is positive (error positive: cup is left), then
+            #   turn left: left motor runs backward, right motor forward.
+            # - If turn_speed is negative, turn right.
+            px.set_motor_speed(1, -turn_speed)  # Left motor
+            px.set_motor_speed(2, turn_speed)   # Right motor
+
+            # Optionally, draw the bounding box for visualization (if display available)
             cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
         else:
-            # If no cup detected, reset steering (or keep previous command)
-            px.set_dir(0)
+            # No cup detected: stop turning.
+            px.set_motor_speed(1, 0)
+            px.set_motor_speed(2, 0)
             print("No cups detected.\n")
         
-        # Optionally, display the frame (if a display is available)
-        cv2.imshow("Detection", frame)
+        # Optionally, display the frame (if a display is attached)
+        cv2.imshow("Cup Detection", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-
+        
         time.sleep(SAMPLETIME)
 
 except KeyboardInterrupt:
     print("\nDetection and control stopped by user.")
 
 finally:
-    # Reset steering and clean up resources
-    px.set_dir(0)
+    # Stop the motors, reset steering, and clean up resources
+    px.set_motor_speed(1, 0)
+    px.set_motor_speed(2, 0)
     picam2.stop_preview()
     picam2.stop()
     GPIO.cleanup()
