@@ -88,7 +88,7 @@ try:
 
             # Play a sound if not already played this detection cycle
             if not sound_played:
-                music.sound_play('/home/pi/HackIllinois_Repo/test.mp3')
+                music.music_play('/home/pi/HackIllinois_Repo/test.mp3')
                 sound_played = True
 
             # Drive forward for a short pulse in the current steering direction
