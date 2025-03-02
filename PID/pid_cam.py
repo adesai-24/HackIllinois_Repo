@@ -86,6 +86,8 @@ try:
                 time.sleep(0.1)
                 music.music_play('/home/pi/HackIllinois_Repo/realMusic/test.mp3')
                 sound_played = True
+            else:
+                music.music_stop()
 
             # Drive forward in the direction of the cup for a short pulse
             px.forward(FORWARD_SPEED)
