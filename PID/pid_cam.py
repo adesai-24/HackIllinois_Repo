@@ -5,17 +5,18 @@ import RPi.GPIO as GPIO
 from ultralytics import YOLO
 from picamera2 import Picamera2
 from picarx import Picarx
+from robot_hat import Music  # Added for sound playback
 
 # Configuration & Constants
 SAMPLETIME = 0.1             # Loop interval (seconds)
-KP_TURN = 0             # Proportional gain for steering
-ERROR_DEADBAND = 20          # Pixel threshold below which cup is considered centered
-MAX_TURN_SPEED = 50          # Maximum steering command (degrees)
-FORWARD_SPEED = 50           # Forward motor speed when driving forward
-FORWARD_DURATION = 0.8     # Duration (seconds) to drive forward when cup detected
+KP_TURN = 0                # Proportional gain for steering
+ERROR_DEADBAND = 20         # Pixel threshold below which cup is considered centered
+MAX_TURN_SPEED = 50         # Maximum steering command (degrees)
+FORWARD_SPEED = 50          # Forward motor speed when driving forward
+FORWARD_DURATION = 0.8      # Duration (seconds) to drive forward when cup detected
 
-FRAME_WIDTH = 640            # Camera frame width (pixels)
-FRAME_HEIGHT = 480           # Camera frame height (pixels)
+FRAME_WIDTH = 640           # Camera frame width (pixels)
+FRAME_HEIGHT = 480          # Camera frame height (pixels)
 
 # Initialize Components
 px = Picarx()
@@ -30,7 +31,14 @@ picam2.configure(config)
 # picam2.start_preview()
 picam2.start()
 
+# Initialize Music for sound playback and set volume
+music = Music()
+music.music_set_volume(100)
+
 print("Starting cup detection and tracking (headless mode). Press Ctrl+C to exit.\n")
+
+# Flag to ensure sound is played only once per detection cycle
+sound_played = False
 
 try:
     while True:
@@ -77,6 +85,11 @@ try:
             # Apply the steering command via the front wheel servo
             px.set_dir_servo_angle(steer_cmd)
             print(f"Cup detected: BBox=({x_min}, {y_min}, {x_max}, {y_max}), Confidence={best_confidence:.2f}")
+            
+            # Play sound if not already played during this detection cycle
+            if not sound_played:
+                music.music_play('/home/pi/HackIllinois_Repo/test.mp3')
+                sound_played = True
 
             # Drive forward in the direction of the cup for a short pulse
             px.forward(FORWARD_SPEED)
@@ -85,6 +98,7 @@ try:
         else:
             px.set_dir_servo_angle(0)
             px.forward(0)
+            sound_played = False  # Reset flag when no cup is detected
             print("No cups detected.")
 
         print("-" * 60)
