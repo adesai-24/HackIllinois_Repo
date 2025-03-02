@@ -94,6 +94,8 @@ try:
             if not sound_played:
                 music.sound_play('/home/pi/HackIllinois_Repo/test.mp3')
                 sound_played = True
+            else:
+                music.sound_stop()
 
             # Drive forward in the current steering direction for a short pulse
             px.forward(FORWARD_SPEED)
