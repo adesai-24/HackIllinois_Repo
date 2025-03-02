@@ -88,7 +88,7 @@ try:
             
             # Play sound if not already played during this detection cycle
             if not sound_played:
-                music.music_play('../musics/Fetty Wap - Again[Audio Only].mp3')
+                music.music_play('home/pi/picar-x/Fetty Wap - Again[Audio Only].mp3')
                 sound_played = True
 
             # Drive forward in the direction of the cup for a short pulse
