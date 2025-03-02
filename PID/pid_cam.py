@@ -5,18 +5,18 @@ import RPi.GPIO as GPIO
 from ultralytics import YOLO
 from picamera2 import Picamera2
 from picarx import Picarx
-from robot_hat import Music  # Added for sound playback
+from robot_hat import Music
 
 # Configuration & Constants
 SAMPLETIME = 0.1             # Loop interval (seconds)
-KP_TURN = 0                # Proportional gain for steering
-ERROR_DEADBAND = 20         # Pixel threshold below which cup is considered centered
-MAX_TURN_SPEED = 50         # Maximum steering command (degrees)
-FORWARD_SPEED = 50          # Forward motor speed when driving forward
-FORWARD_DURATION = 0.8      # Duration (seconds) to drive forward when cup detected
+KP_TURN = 0.2                # Proportional gain for steering
+ERROR_DEADBAND = 20          # Pixel threshold below which cup is considered centered
+MAX_TURN_SPEED = 50          # Maximum steering command (degrees)
+FORWARD_SPEED = 50           # Forward motor speed when driving forward
+FORWARD_DURATION = 1         # Duration (seconds) to drive forward when cup detected
 
-FRAME_WIDTH = 640           # Camera frame width (pixels)
-FRAME_HEIGHT = 480          # Camera frame height (pixels)
+FRAME_WIDTH = 640            # Camera frame width (pixels)
+FRAME_HEIGHT = 480           # Camera frame height (pixels)
 
 # Initialize Components
 px = Picarx()
@@ -27,7 +27,7 @@ config = picam2.create_preview_configuration(
     main={"format": "XRGB8888", "size": (FRAME_WIDTH, FRAME_HEIGHT)}
 )
 picam2.configure(config)
-# Start preview if display is attached; otherwise, this can be omitted
+# Optionally start preview if a display is attached; omit if headless
 # picam2.start_preview()
 picam2.start()
 
@@ -35,18 +35,18 @@ picam2.start()
 music = Music()
 music.music_set_volume(100)
 
-print("Starting cup detection and tracking (headless mode). Press Ctrl+C to exit.\n")
+print("Starting cup detection, tracking, and forward drive. Press Ctrl+C to exit.\n")
 
 # Flag to ensure sound is played only once per detection cycle
 sound_played = False
 
 try:
     while True:
-        # Capture a frame and drop the alpha channel
+        # Capture a frame and drop the alpha channel (convert XRGB to RGB)
         frame = picam2.capture_array()
         frame = frame[:, :, :3]
 
-        # Run YOLO inference (stream mode for efficiency)
+        # Run YOLO inference (using stream mode for efficiency)
         results = model(frame, stream=True)
         
         cup_detected = False
@@ -65,7 +65,7 @@ try:
                     cup_detected = True
 
         if cup_detected and best_bbox is not None:
-            # Extract bounding box and compute centers
+            # Extract bounding box and compute the horizontal center
             x_min, y_min, x_max, y_max = map(int, best_bbox)
             bbox_center_x = (x_min + x_max) / 2
             frame_center_x = FRAME_WIDTH / 2
@@ -73,32 +73,33 @@ try:
 
             if abs(error) < ERROR_DEADBAND:
                 steer_cmd = 0
-                print("Cup centered. Steering straight")
+                print("Cup centered. Steering straight.")
             else:
                 steer_cmd = KP_TURN * error
                 if steer_cmd > MAX_TURN_SPEED:
                     steer_cmd = MAX_TURN_SPEED
                 elif steer_cmd < -MAX_TURN_SPEED:
                     steer_cmd = -MAX_TURN_SPEED
-                print(f"Error: {error:.2f}, Steering command: {steer_cmd:.2f}°")
+                print(f"Error: {error:.2f} pixels, Steering command: {steer_cmd:.2f}°")
             
             # Apply the steering command via the front wheel servo
             px.set_dir_servo_angle(steer_cmd)
             print(f"Cup detected: BBox=({x_min}, {y_min}, {x_max}, {y_max}), Confidence={best_confidence:.2f}")
-            
-            # Play sound if not already played during this detection cycle
+
+            # Play sound effect once per detection cycle
             if not sound_played:
-                music.music_play('home/pi/picar-x/Fetty Wap - Again[Audio Only].mp3')
+                music.sound_play('../sounds/car-double-horn.wav')
                 sound_played = True
 
-            # Drive forward in the direction of the cup for a short pulse
+            # Drive forward for a short pulse in the current direction
             px.forward(FORWARD_SPEED)
             time.sleep(FORWARD_DURATION)
             px.forward(0)
         else:
+            # No cup detected: reset steering, stop forward motion, and reset sound flag
             px.set_dir_servo_angle(0)
             px.forward(0)
-            sound_played = False  # Reset flag when no cup is detected
+            sound_played = False
             print("No cups detected.")
 
         print("-" * 60)
@@ -113,4 +114,4 @@ finally:
     px.forward(0)
     picam2.stop()
     GPIO.cleanup()
-    # Do not call cv2.destroyAllWindows() since no windows were created
+    # No cv2.destroyAllWindows() needed in headless mode
