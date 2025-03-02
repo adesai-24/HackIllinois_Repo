@@ -10,7 +10,7 @@ Input key to call the function!
     space: Play sound effect (Car horn)
     c: Play sound effect with threads
     t: Text to speak
-    q: Play/Stop Music
+    q: Play/Stop Musics
 '''
 
 def main():
