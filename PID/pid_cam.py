@@ -34,6 +34,7 @@ picam2.start()
 # Initialize Music for sound playback
 music = Music()
 music.music_set_volume(100)
+music.music_play('/home/pi/HackIllinois_Repo/test.mp3')
 print("Starting cup detection, tracking, and forward drive. Press Ctrl+C to exit.\n")
 
 # Flag to ensure sound is played only once per detection cycle
