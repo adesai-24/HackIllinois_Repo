@@ -32,6 +32,8 @@ picam2.start()
 
 print("Starting cup detection and tracking (headless mode). Press Ctrl+C to exit.\n")
 
+sound_played = False
+
 try:
     while True:
         # Capture a frame and drop the alpha channel
@@ -77,6 +79,11 @@ try:
             # Apply the steering command via the front wheel servo
             px.set_dir_servo_angle(steer_cmd)
             print(f"Cup detected: BBox=({x_min}, {y_min}, {x_max}, {y_max}), Confidence={best_confidence:.2f}")
+
+            if not sound_played:
+                time.sleep(0.1)
+                music.music_play('../realMusic/test.mp3')
+                sound_played = True
 
             # Drive forward in the direction of the cup for a short pulse
             px.forward(FORWARD_SPEED)
