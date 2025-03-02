@@ -6,6 +6,8 @@ from ultralytics import YOLO
 from picamera2 import Picamera2
 from picarx import Picarx
 from robot_hat import Music  # Added for sound playback
+from gpiozero import Buzzer
+
 
 # Configuration & Constants
 SAMPLETIME = 0.1             # Loop interval (seconds)
@@ -62,6 +64,10 @@ try:
                     if conf > best_confidence:
                         best_confidence = conf
                         best_bbox = box.xyxy[0]
+                        buzzer = Buzzer(22)
+                        buzzer.on()
+                        time.sleep(1)
+                        buzzer.off()
                     cup_detected = True
 
         if cup_detected and best_bbox is not None:
@@ -90,6 +96,10 @@ try:
             if not sound_played:
                 music.music_play('/home/pi/HackIllinois_Repo/test.mp3')
                 sound_played = True
+                buzzer = Buzzer(22)
+                buzzer.on()
+                time.sleep(1)
+                buzzer.off()
 
             # Drive forward in the direction of the cup for a short pulse
             px.forward(FORWARD_SPEED)
