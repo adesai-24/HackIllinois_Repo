@@ -23,6 +23,9 @@ This project is a robotic platform that leverages computer vision (CV) and PID c
 
 ## Features
 
+- **Modular and Scalable Architecture:**  
+  Designed with scalability in mind, our framework is easy to extend. Leveraging YOLO and a wealth of open-source resources, users can readily retrain or swap out models, add new sensors, or integrate additional functionalities with minimal effort for anybody from any background ranging from computer scientists to farmers who work on sight.
+
 - **High-Performance Object Detection with YOLO:**  
   Unlike most teams that rely on conventional gradient-based methods, our approach uses a specially-trained YOLO model that we developed ourselves. This tailored model is optimized to detect target animals with higher accuracy.
 
@@ -37,6 +40,7 @@ This project is a robotic platform that leverages computer vision (CV) and PID c
 
 - **Hardware Integration:**  
   Uses SunFounder’s Picarx platform and Picamera2, ensuring seamless interaction between sensors, motors, and the camera module.
+
 
 
 ---
@@ -96,4 +100,4 @@ This project was inspired by the potential to use robotics and computer vision t
 
 ---
 
-Link for John Deere Github: https://github.com/jameskabbes/HackIllinois2025
+
