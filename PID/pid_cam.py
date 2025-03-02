@@ -85,7 +85,7 @@ try:
 
             if not sound_played:
                 time.sleep(0.1)
-                music.music_play('/home/pi/HackIllinois_Repo/realMusic/slow-trail-Ahjay_Stelino.mp3')
+                music.music_play('/home/pi/HackIllinois_Repo/realMusic/thing.mp3')
                 sound_played = True
             else:
                 music.music_stop()
