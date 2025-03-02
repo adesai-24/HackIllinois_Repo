@@ -33,7 +33,7 @@ picam2.start()
 
 # Initialize Music for sound playback
 music = Music()
-music.music_set_volume(60)
+music.music_set_volume(100)
 print("Starting cup detection, tracking, and forward drive. Press Ctrl+C to exit.\n")
 
 # Flag to ensure sound is played only once per detection cycle
@@ -88,7 +88,7 @@ try:
 
             # Play a sound if not already played this detection cycle
             if not sound_played:
-                music.sound_play('/home/pi/HackIllinois_Repo/audio')
+                music.sound_play('/home/pi/HackIllinois_Repo/test.mp3')
                 sound_played = True
 
             # Drive forward for a short pulse in the current steering direction
