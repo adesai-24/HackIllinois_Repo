@@ -1,52 +1,51 @@
 #!/usr/bin/env python3
-import cv2
+import time
 from ultralytics import YOLO
 from picamera2 import Picamera2
-import time
 
-# Load the pretrained YOLO model (adjust to the model you want to use)
+# Load the YOLOv5s model (you can change this to your model file)
 model = YOLO("yolov5s.pt")
 
 # Initialize the robot camera using Picamera2
 picam2 = Picamera2()
-# Create a preview configuration with desired resolution (e.g., 640x480)
+# Create a preview configuration at 640x480 with a 4-channel (XRGB) format
 config = picam2.create_preview_configuration(main={"format": "XRGB8888", "size": (640, 480)})
 picam2.configure(config)
 picam2.start()
 
-print("Press 'q' to exit.")
+print("Starting cup detection. Press Ctrl+C to exit.")
 
-while True:
-    # Capture a frame from the robot camera as a numpy array
-    frame = picam2.capture_array()
-    # Drop the extra channel to convert the frame from 4 channels to 3 channels.
-    frame = frame[:, :, :3]
+try:
+    while True:
+        # Capture a frame from the robot camera as a numpy array
+        frame = picam2.capture_array()
+        # Convert from 4 channels to 3 channels (drop the alpha channel)
+        frame = frame[:, :, :3]
 
-    # Run the YOLO model inference on the frame; use stream=True for faster inference
-    results = model(frame, stream=True)
+        # Run YOLO inference on the frame (stream mode for efficiency)
+        results = model(frame, stream=True)
 
-    # Process detections in the results
-    for result in results:
-        for box in result.boxes:
-            # Check the detected class index using model.names if needed:
-            cls_index = int(box.cls[0]) if box.cls is not None else -1
-            # For COCO, index 41 corresponds to "cup"
-            if cls_index == 41:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])  # Bounding box coordinates
-                confidence = box.conf[0]  # Confidence score
-                label = f"Cup {confidence:.2f}"
-                # Draw bounding box and label
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
-                cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 
-                            0.5, (0, 255, 0), 2)
+        cup_count = 0
+        probabilities = []
+        for result in results:
+            for box in result.boxes:
+                # Get the detected class index (COCO index 41 for cup)
+                cls_index = int(box.cls[0]) if box.cls is not None else -1
+                if cls_index == 41:
+                    cup_count += 1
+                    probabilities.append(box.conf[0])
+        
+        # Output the results to the console
+        if cup_count > 0:
+            prob_str = ", ".join([f"{prob:.2f}" for prob in probabilities])
+            print(f"Detected {cup_count} cup(s) with probabilities: {prob_str}")
+        else:
+            print("No cups detected")
+        
+        time.sleep(1)  # wait 1 second between frames
 
-    # Display the frame
-    cv2.imshow("Robot Camera YOLO Detection", frame)
+except KeyboardInterrupt:
+    print("\nDetection stopped by user.")
 
-    # Quit the loop if 'q' is pressed
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-# Stop the camera and close OpenCV windows
-picam2.stop()
-cv2.destroyAllWindows()
+finally:
+    picam2.stop()
