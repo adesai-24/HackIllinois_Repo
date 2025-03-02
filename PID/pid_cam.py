@@ -7,7 +7,7 @@ from picamera2 import Picamera2
 from picarx import Picarx
 
 # Configuration & Constants
-SAMPLETIME = 0.1             # Loop interval (seconds)
+SAMPLETIME = 1             # Loop interval (seconds)
 KP_TURN = 0.2                # Proportional gain for steering
 ERROR_DEADBAND = 20          # Pixel threshold below which cup is considered centered
 MAX_TURN_SPEED = 50          # Maximum steering command (degrees)
