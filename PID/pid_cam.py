@@ -82,7 +82,7 @@ try:
 
             if not sound_played:
                 time.sleep(0.1)
-                music.music_play('../realMusic/test.mp3')
+                music.music_play('/home/pi/HackIllinois_Repo/realMusic/test.mp3')
                 sound_played = True
 
             # Drive forward in the direction of the cup for a short pulse
