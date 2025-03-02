@@ -2,99 +2,117 @@
 import time
 import cv2
 import RPi.GPIO as GPIO
-
-# Import SunFounder libraries
-from picarx import Picarx           # For driving the car (motors & steering)
-from picamera2 import Picamera2     # For camera functionality
+from ultralytics import YOLO
+from picamera2 import Picamera2
+from picarx import Picarx
 
 # -----------------------------
 # Configuration & Constants
 # -----------------------------
 SAMPLETIME = 0.1        # Loop interval (seconds)
+KP_TURN = 0.1           # Proportional gain for turning
 
-# Proportional gain for turning (tune this for your setup)
-KP_TURN = 0.1
+FRAME_WIDTH = 640       # Camera frame width (pixels)
+FRAME_HEIGHT = 480      # Camera frame height (pixels)
 
-# Camera frame dimensions (adjust based on your camera configuration)
-FRAME_WIDTH = 640
-FRAME_HEIGHT = 480
-
-# Steering limits (assumed range in degrees; adjust as needed)
+# Steering limits (in degrees; adjust as needed)
 MAX_STEER = 30
 MIN_STEER = -30
 
 # -----------------------------
-# Initialize SunFounder Components
+# Initialize Components
 # -----------------------------
+# Initialize robot drive & steering
 px = Picarx()
+
+# Load YOLO model (using a YOLOv5 model file)
+model = YOLO("yolov5s.pt")
+# (If using a YOLOv8 model, adjust the file accordingly.)
+
+# Initialize the robot camera using Picamera2
 picam2 = Picamera2()
-picam2.start_preview()  # Start camera preview if desired
+# Create and configure a preview at the desired resolution and format.
+config = picam2.create_preview_configuration(
+    main={"format": "XRGB8888", "size": (FRAME_WIDTH, FRAME_HEIGHT)}
+)
+picam2.configure(config)
+picam2.start_preview()  # Optional: start preview if you have a display connected
+picam2.start()
 
-# -----------------------------
-# Dummy Object Detection Function
-# -----------------------------
-def detect_object(frame):
-    """
-    This function simulates object detection.
-    Replace this with your actual CV algorithm.
-    It returns a bounding box as (x_min, y_min, x_max, y_max).
-    """
-    # For demonstration: simulate a bounding box around the center.
-    box_width = 100
-    box_height = 100
-    x_min = (FRAME_WIDTH // 2) - (box_width // 2)
-    y_min = (FRAME_HEIGHT // 2) - (box_height // 2)
-    x_max = x_min + box_width
-    y_max = y_min + box_height
-    return (x_min, y_min, x_max, y_max)
+print("Starting combined cup detection and steering control. Press 'q' to exit.")
 
-print("Starting turning control using CV bounding box...")
+try:
+    while True:
+        # Capture a frame from the camera (4 channels: XRGB)
+        frame = picam2.capture_array()
+        # Drop the extra alpha channel (convert from 4 channels to 3 channels)
+        frame = frame[:, :, :3]
+        
+        # Run YOLO inference (using stream mode for efficiency)
+        results = model(frame, stream=True)
+        
+        cup_detected = False
+        best_bbox = None
+        best_confidence = 0
+        
+        # Process detections: look for cups (COCO index 41)
+        for result in results:
+            for box in result.boxes:
+                cls_index = int(box.cls[0]) if box.cls is not None else -1
+                if cls_index == 41:
+                    conf = box.conf[0]
+                    # Choose the detection with the highest confidence
+                    if conf > best_confidence:
+                        best_confidence = conf
+                        best_bbox = box.xyxy[0]
+                    cup_detected = True
+        
+        if cup_detected and best_bbox is not None:
+            # Extract bounding box coordinates
+            x_min, y_min, x_max, y_max = map(int, best_bbox)
+            # Compute the center of the bounding box
+            bbox_center_x = (x_min + x_max) / 2
+            # Compute the error: difference between frame center and object center
+            frame_center_x = FRAME_WIDTH / 2
+            error = frame_center_x - bbox_center_x  # positive error means object is left of center
+            
+            # Compute turn command (proportional to error)
+            turn_command = KP_TURN * error
+            # Clamp the turn command to steering limits
+            if turn_command > MAX_STEER:
+                turn_command = MAX_STEER
+            elif turn_command < MIN_STEER:
+                turn_command = MIN_STEER
+            
+            # Apply the steering command
+            px.set_dir(turn_command)
+            
+            # Print detection and steering info to the console
+            print(f"Cup detected: BBox=({x_min}, {y_min}, {x_max}, {y_max}), Confidence={best_confidence:.2f}")
+            print(f"Frame center: {frame_center_x:.2f}, Object center: {bbox_center_x:.2f}, Error: {error:.2f}")
+            print(f"Turn command applied: {turn_command:.2f}\n")
+            
+            # Optionally, draw the bounding box on the frame (for visualization)
+            cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+        else:
+            # If no cup detected, reset steering (or keep previous command)
+            px.set_dir(0)
+            print("No cups detected.\n")
+        
+        # Optionally, display the frame (if a display is available)
+        cv2.imshow("Detection", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
 
-while True:
-    # Capture a frame from the camera
-    frame = picam2.capture_array()
-    
-    # Detect object to get the bounding box
-    bbox = detect_object(frame)
-    x_min, y_min, x_max, y_max = bbox
-    
-    # Calculate bounding box dimensions and center
-    bbox_width = x_max - x_min
-    bbox_height = y_max - y_min
-    bbox_center_x = (x_min + x_max) / 2
-    bbox_center_y = (y_min + y_max) / 2
+        time.sleep(SAMPLETIME)
 
-    # Determine the horizontal error (difference from the frame center)
-    frame_center_x = FRAME_WIDTH / 2
-    error = frame_center_x - bbox_center_x  # positive: object is left of center
+except KeyboardInterrupt:
+    print("\nDetection and control stopped by user.")
 
-    # Compute the turn command using a proportional controller
-    turn_command = KP_TURN * error
-
-    # Clamp the turn command to the steering limits
-    if turn_command > MAX_STEER:
-        turn_command = MAX_STEER
-    elif turn_command < MIN_STEER:
-        turn_command = MIN_STEER
-
-    # Apply the steering command
-    # (Assumes px.set_dir() adjusts the steering angle; adjust if your API differs)
-    px.set_dir(turn_command)
-
-    # Debug output
-    print(f"BBox: {bbox}, Center: ({bbox_center_x:.2f}, {bbox_center_y:.2f}), " +
-          f"Error: {error:.2f}, Turn command: {turn_command:.2f}")
-
-    # Optional: Draw the bounding box on the frame for visualization
-    cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
-    cv2.imshow("Frame", frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-    time.sleep(SAMPLETIME)
-
-# When finished, reset steering and clean up resources
-px.set_dir(0)
-picam2.stop_preview()
-GPIO.cleanup()
-cv2.destroyAllWindows()
+finally:
+    # Reset steering and clean up resources
+    px.set_dir(0)
+    picam2.stop_preview()
+    picam2.stop()
+    GPIO.cleanup()
+    cv2.destroyAllWindows()
