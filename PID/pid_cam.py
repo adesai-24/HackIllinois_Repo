@@ -64,7 +64,7 @@ try:
                     if conf > best_confidence:
                         best_confidence = conf
                         best_bbox = box.xyxy[0]
-                        buzzer = Buzzer(22)
+                        buzzer = Buzzer(17)
                         buzzer.on()
                         time.sleep(1)
                         buzzer.off()
@@ -96,7 +96,7 @@ try:
             if not sound_played:
                 music.music_play('/home/pi/HackIllinois_Repo/test.mp3')
                 sound_played = True
-                buzzer = Buzzer(22)
+                buzzer = Buzzer(17)
                 buzzer.on()
                 time.sleep(1)
                 buzzer.off()
