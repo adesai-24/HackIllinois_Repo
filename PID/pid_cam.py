@@ -5,14 +5,15 @@ import RPi.GPIO as GPIO
 from ultralytics import YOLO
 from picamera2 import Picamera2
 from picarx import Picarx
+from robot_hat import Music
 
 # Configuration & Constants
 SAMPLETIME = 0.1             # Loop interval (seconds)
-KP_TURN = 0             # Proportional gain for steering
+KP_TURN = 0.2                # Proportional gain for steering
 ERROR_DEADBAND = 20          # Pixel threshold below which cup is considered centered
 MAX_TURN_SPEED = 50          # Maximum steering command (degrees)
 FORWARD_SPEED = 50           # Forward motor speed when driving forward
-FORWARD_DURATION = 0.8     # Duration (seconds) to drive forward when cup detected
+FORWARD_DURATION = 0.1        # Duration (seconds) to drive forward when cup detected
 
 FRAME_WIDTH = 640            # Camera frame width (pixels)
 FRAME_HEIGHT = 480           # Camera frame height (pixels)
@@ -26,15 +27,21 @@ config = picam2.create_preview_configuration(
     main={"format": "XRGB8888", "size": (FRAME_WIDTH, FRAME_HEIGHT)}
 )
 picam2.configure(config)
-# Start preview if display is attached; otherwise, this can be omitted
+# Optionally start preview if you have a display; omit if headless
 # picam2.start_preview()
 picam2.start()
 
-print("Starting cup detection and tracking (headless mode). Press Ctrl+C to exit.\n")
+# Initialize Music for sound playback
+music = Music()
+
+print("Starting cup detection, tracking, and forward drive. Press Ctrl+C to exit.\n")
+
+# Flag to ensure sound is played only once per detection cycle
+sound_played = False
 
 try:
     while True:
-        # Capture a frame and drop the alpha channel
+        # Capture a frame and convert from 4-channel (XRGB) to 3-channel (RGB)
         frame = picam2.capture_array()
         frame = frame[:, :, :3]
 
@@ -57,12 +64,13 @@ try:
                     cup_detected = True
 
         if cup_detected and best_bbox is not None:
-            # Extract bounding box and compute centers
+            # Extract bounding box and compute the horizontal center
             x_min, y_min, x_max, y_max = map(int, best_bbox)
             bbox_center_x = (x_min + x_max) / 2
             frame_center_x = FRAME_WIDTH / 2
             error = frame_center_x - bbox_center_x
 
+            # Compute steering command using proportional control
             if abs(error) < ERROR_DEADBAND:
                 steer_cmd = 0
                 print("Cup centered. Steering straight.")
@@ -72,21 +80,29 @@ try:
                     steer_cmd = MAX_TURN_SPEED
                 elif steer_cmd < -MAX_TURN_SPEED:
                     steer_cmd = -MAX_TURN_SPEED
-                print(f"Error: {error:.2f}, Steering command: {steer_cmd:.2f}°")
+                print(f"Error: {error:.2f} pixels, Steering command: {steer_cmd:.2f}°")
             
-            # Apply the steering command via the front wheel servo
+            # Apply steering via the front wheel servo
             px.set_dir_servo_angle(steer_cmd)
             print(f"Cup detected: BBox=({x_min}, {y_min}, {x_max}, {y_max}), Confidence={best_confidence:.2f}")
 
-            # Drive forward in the direction of the cup for a short pulse
+            # Play a sound if not already played this detection cycle
+            if not sound_played:
+                music.sound_play('../sounds/car-double-horn.wav')
+                sound_played = True
+
+            # Drive forward for a short pulse in the current steering direction
             px.forward(FORWARD_SPEED)
             time.sleep(FORWARD_DURATION)
             px.forward(0)
         else:
+            # No cup detected: reset steering, stop forward motion, and reset sound flag
             px.set_dir_servo_angle(0)
             px.forward(0)
+            sound_played = False
             print("No cups detected.")
 
+        # Print a separator for clarity in the console
         print("-" * 60)
         time.sleep(SAMPLETIME)
 
@@ -94,9 +110,9 @@ except KeyboardInterrupt:
     print("\nDetection and control stopped by user.")
 
 finally:
-    # Reset and clean up
+    # Reset steering and forward motion, then clean up
     px.set_dir_servo_angle(0)
     px.forward(0)
     picam2.stop()
     GPIO.cleanup()
-    # Do not call cv2.destroyAllWindows() since no windows were created
+    # No cv2.destroyAllWindows() needed if no windows are created
