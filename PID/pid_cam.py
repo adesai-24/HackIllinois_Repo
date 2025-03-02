@@ -89,13 +89,14 @@ try:
             # Apply the steering command via the front wheel servo
             px.set_dir_servo_angle(steer_cmd)
             print(f"Cup detected: BBox=({x_min}, {y_min}, {x_max}, {y_max}), Confidence={best_confidence:.2f}")
+            music.sound_play('/home/pi/HackIllinois_Repo/test.mp3')
 
             # Play a sound effect if not already played in this cycle
-            if not sound_played:
-                music.sound_play('/home/pi/HackIllinois_Repo/test.mp3')
-                sound_played = True
-            else:
-                music.sound_stop()
+            # if not sound_played:
+            #     music.sound_play('/home/pi/HackIllinois_Repo/test.mp3')
+            #     sound_played = True
+            # else:
+            #     music.sound_stop()
 
             # Drive forward in the current steering direction for a short pulse
             px.forward(FORWARD_SPEED)
