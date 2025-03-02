@@ -23,18 +23,19 @@ config = picam2.create_preview_configuration(
     main={"format": "XRGB8888", "size": (FRAME_WIDTH, FRAME_HEIGHT)}
 )
 picam2.configure(config)
-picam2.start_preview()  # Optional if display is available
+# (Optional preview if display is attached; ignore if headless)
+picam2.start_preview()
 picam2.start()
 
-print("Starting continuous cup detection and tracking. Press Ctrl+C to exit.\n")
+print("Starting cup detection and tracking (headless mode). Press Ctrl+C to exit.\n")
 
 try:
     while True:
-        # Capture a frame and convert to 3-channel RGB
+        # Capture a frame and drop the alpha channel
         frame = picam2.capture_array()
         frame = frame[:, :, :3]
-        
-        # Run YOLO inference (stream mode)
+
+        # Run YOLO inference (stream mode for efficiency)
         results = model(frame, stream=True)
         
         cup_detected = False
@@ -59,49 +60,38 @@ try:
             frame_center_x = FRAME_WIDTH / 2
             error = frame_center_x - bbox_center_x
 
-            # Determine steering command based on error
+            # Compute steering command using proportional control
             if abs(error) < ERROR_DEADBAND:
                 steer_cmd = 0
-                status = "Cup centered. Steering straight."
+                print("Cup centered. Steering straight.")
             else:
                 steer_cmd = KP_TURN * error
+                # Clamp the command to maximum turn speed
                 if steer_cmd > MAX_TURN_SPEED:
                     steer_cmd = MAX_TURN_SPEED
                 elif steer_cmd < -MAX_TURN_SPEED:
                     steer_cmd = -MAX_TURN_SPEED
-                status = f"Turning with command: {steer_cmd:.2f}° (Error: {error:.2f})"
+                print(f"Error: {error:.2f}, Steering command: {steer_cmd:.2f}°")
             
-            # Apply steering via front wheel servo
+            # Apply the steering command via the front wheel servo
             px.set_dir_servo_angle(steer_cmd)
-            # Output detection info
             print(f"Cup detected: BBox=({x_min}, {y_min}, {x_max}, {y_max}), Confidence={best_confidence:.2f}")
-            print(f"Frame center: {frame_center_x:.2f}, Object center: {bbox_center_x:.2f}, Error: {error:.2f}")
-            print(status)
         else:
             px.set_dir_servo_angle(0)
             print("No cups detected.")
-        
-        # (Optional) Display the frame on your laptop if GUI is available:
-        try:
-            cv2.imshow("Cup Detection", frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-        except cv2.error:
-            # If display functions fail (e.g., running headless), ignore.
-            pass
 
+        # Print a separator for clarity in the console output
+        print("-" * 60)
+        
         time.sleep(SAMPLETIME)
-        print("-" * 60)  # Separator for each loop iteration
 
 except KeyboardInterrupt:
-    print("\nDetection and tracking stopped by user.")
+    print("\nDetection and control stopped by user.")
 
 finally:
+    # Reset steering and clean up resources
     px.set_dir_servo_angle(0)
     picam2.stop_preview()
     picam2.stop()
     GPIO.cleanup()
-    try:
-        cv2.destroyAllWindows()
-    except cv2.error:
-        pass
+    # No need to call cv2.destroyAllWindows() since we aren't creating any windows
