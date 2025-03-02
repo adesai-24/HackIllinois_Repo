@@ -5,6 +5,7 @@ import RPi.GPIO as GPIO
 from ultralytics import YOLO
 from picamera2 import Picamera2
 from picarx import Picarx
+from robot_hat import Music
 
 # Configuration & Constants
 SAMPLETIME = 0.1             # Loop interval (seconds)
