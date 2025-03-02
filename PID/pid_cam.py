@@ -13,7 +13,7 @@ KP_TURN = 0.2                # Proportional gain for steering
 ERROR_DEADBAND = 20          # Pixel threshold below which cup is considered centered
 MAX_TURN_SPEED = 50          # Maximum steering command (degrees)
 FORWARD_SPEED = 50           # Forward motor speed when driving forward
-FORWARD_DURATION = 0.1        # Duration (seconds) to drive forward when cup detected
+FORWARD_DURATION = 1        # Duration (seconds) to drive forward when cup detected
 
 FRAME_WIDTH = 640            # Camera frame width (pixels)
 FRAME_HEIGHT = 480           # Camera frame height (pixels)
