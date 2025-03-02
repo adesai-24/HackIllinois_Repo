@@ -88,7 +88,7 @@ try:
 
             # Play sound effect once per detection cycle
             if not sound_played:
-                music.sound_play('../sounds/car-double-horn.wav')
+                music.sound_play('/home/pi/HackIllinois_Repo/PID/Fetty Wap  - Again [Audio Only].mp3')
                 sound_played = True
 
             # Drive forward for a short pulse in the current direction
